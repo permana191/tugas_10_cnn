@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hasil Analisis | UNIBBA FTI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&family=Orbitron:wght@700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="dashboard-container" style="max-width: 900px;">
+        <div class="img-panel">
+            <img src="{{ image_path }}" alt="Wajah yang Dianalisis">
+            <div class="emotion-badge mt-3" style="font-size: 30px;">{{ emotion }}</div>
+            <p>Confidence: <span style="color:#00d2ff; font-weight:bold;">{{ confidence }}%</span></p>
+            <a href="/" class="btn-back mt-3"><i class="fa-solid fa-rotate-left"></i> Pindai Lagi</a>
+        </div>
+
+        <div class="data-panel">
+            <h3>Analisis Matriks Probabilitas</h3>
+            <canvas id="emotionChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // Mengambil data Array dari Flask untuk Chart.js
+        const labels = {{ labels | tojson }};
+        const dataProbs = {{ probs | tojson }};
+
+        const ctx = document.getElementById('emotionChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Probabilitas Emosi (%)',
+                    data: dataProbs,
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.7)', 'rgba(54, 162, 235, 0.7)', 
+                        'rgba(255, 206, 86, 0.7)', 'rgba(75, 192, 192, 0.7)', 
+                        'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)', 'rgba(0, 210, 255, 0.7)'
+                    ],
+                    borderColor: '#fff',
+                    borderWidth: 1,
+                    borderRadius: 5
+                }]
+            },
+            options: {
+                indexAxis: 'y', // Membuat grafik horizontal agar lebih mudah dibaca
+                scales: {
+                    x: { beginAtZero: true, max: 100, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#fff' } },
+                    y: { grid: { display: false }, ticks: { color: '#00d2ff', font: { weight: 'bold' } } }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+    </script>
+</body>
+</html>
