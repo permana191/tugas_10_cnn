@@ -1,122 +1,72 @@
-from flask import Flask, render_template, request, redirect, jsonify
-from werkzeug.utils import secure_filename
-from tensorflow.keras.models import load_model
-import numpy as np
 import os
-import uuid
+from flask import Flask, render_template, request, jsonify
+import cv2
+import numpy as np
 import base64
-import cv2  # Tambahan OpenCV untuk Auto-Crop & Real-Time Bounding Box
+from tensorflow.keras.models import load_model
 
-app = Flask(__name__
+# 1. INISIALISASI FLASK HARUS DI PALING ATAS
+app = Flask(__name__)
 
+# 2. MEMUAT MODEL AI & HAAR CASCADE (Hanya dilakukan sekali saat server menyala)
+print("Memuat Model AI & Haar Cascade...")
+try:
+    # SESUAIKAN NAMA FILE MODEL & XML KAMU DI SINI
+    model = load_model('model.h5') 
+    face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
+    
+    # Label emosi standar FER2013 (Sesuaikan jika labelmu berbeda)
+    class_labels = ['Angry', 'Disgust', 'Fear', 'Happy', 'Neutral', 'Sad', 'Surprise']
+    print("Sistem Siap!")
+except Exception as e:
+    print(f"Error saat memuat model: {e}")
+
+# 3. ROUTING / HALAMAN UTAMA
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/predict_live', methods=['POST'])
-def predict_live():
-    # ... kode kamu ...
-app.config['UPLOAD_FOLDER'] = 'static/uploads'
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-
-print("Memuat Model AI & Haar Cascade...")
-model = load_model('models/model_emosi.h5')
-class_labels = ['Angry', 'Disgust', 'Fear', 'Happy', 'Neutral', 'Sad', 'Surprise']
-
-# Load Haar-Cascade dari OpenCV untuk deteksi wajah
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-print("Sistem Siap!")
-
-# FITUR 1: Smart Face Auto-Crop
-def process_image_for_prediction(filepath):
-    img = cv2.imread(filepath)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
-    # Deteksi wajah di dalam gambar
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
-    
-    if len(faces) > 0:
-        # Jika wajah ditemukan, potong (crop) hanya bagian wajahnya saja
-        (x, y, w, h) = faces[0]
-        roi_gray = gray[y:y+h, x:x+w]
-    else:
-        # Jika tidak ada wajah, gunakan seluruh gambar
-        roi_gray = gray
-
-    # Preprocessing untuk model CNN
-    roi_gray = cv2.resize(roi_gray, (48, 48))
-    img_array = roi_gray.astype('float32') / 255.0
-    img_array = np.expand_dims(img_array, axis=0)
-    img_array = np.expand_dims(img_array, axis=-1) # Tambah channel grayscale
-    return img_array
-
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    if request.method == 'POST':
-        filepath = None
-        if 'webcam_image' in request.form and request.form['webcam_image'] != '':
-            image_data = request.form['webcam_image'].split(',')[1]
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"{uuid.uuid4().hex}.png")
-            with open(filepath, "wb") as f:
-                f.write(base64.b64decode(image_data))
-                
-        elif 'file' in request.files and request.files['file'].filename != '':
-            file = request.files['file']
-            filename = secure_filename(f"{uuid.uuid4().hex}.jpg")
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(filepath)
-            
-        if filepath:
-            processed_image = process_image_for_prediction(filepath)
-            prediction = model.predict(processed_image)[0]
-            
-            # FITUR 2: Menyiapkan data untuk Grafik Chart.js
-            emotion_probs = [round(float(p) * 100, 2) for p in prediction]
-            predicted_class = class_labels[np.argmax(prediction)]
-            confidence = np.max(prediction) * 100
-            
-            return render_template('result.html', 
-                                   emotion=predicted_class, 
-                                   confidence=round(confidence, 2),
-                                   image_path=filepath,
-                                   probs=emotion_probs,
-                                   labels=class_labels)
-        return redirect(request.url)
-    return render_template('index.html')
-
-# FITUR 3: API Endpoint untuk Real-Time Live Video Tracking
+# 4. ROUTING / API PREDIKSI
 @app.route('/predict_live', methods=['POST'])
 def predict_live():
     data = request.json
     if not data or 'image' not in data:
         return jsonify({'error': 'No image'})
 
-    # Decode base64 frame dari video JS
-    img_data = base64.b64decode(data['image'].split(',')[1])
-    np_arr = np.frombuffer(img_data, np.uint8)
-    img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
-    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-    results = []
-    
-    # Deteksi dan prediksi multi-wajah secara real-time
-    for (x, y, w, h) in faces:
-        roi = gray[y:y+h, x:x+w]
-        roi = cv2.resize(roi, (48, 48))
-        roi = roi.astype('float32') / 255.0
-        roi = np.expand_dims(roi, axis=0)
-        roi = np.expand_dims(roi, axis=-1)
-        
-        pred = model.predict(roi, verbose=0)[0]
-        idx = np.argmax(pred)
-        results.append({
-            'box': [int(x), int(y), int(w), int(h)],
-            'emotion': class_labels[idx],
-            'confidence': round(float(pred[idx]) * 100, 2)
-        })
-        
-    return jsonify({'faces': results})
+    try:
+        # Decode base64 frame dari video JS
+        img_data = base64.b64decode(data['image'].split(',')[1])
+        np_arr = np.frombuffer(img_data, np.uint8)
+        img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
+        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+        results = []
+
+        # Deteksi dan prediksi multi-wajah secara real-time
+        for (x, y, w, h) in faces:
+            roi = gray[y:y+h, x:x+w]
+            roi = cv2.resize(roi, (48, 48))
+            roi = roi.astype('float32') / 255.0
+            roi = np.expand_dims(roi, axis=0)
+            roi = np.expand_dims(roi, axis=-1)
+
+            pred = model.predict(roi, verbose=0)[0]
+            idx = np.argmax(pred)
+            results.append({
+                'box': [int(x), int(y), int(w), int(h)],
+                'emotion': class_labels[idx],
+                'confidence': round(float(pred[idx]) * 100, 2)
+            })
+
+        return jsonify({'faces': results})
+    
+    except Exception as e:
+        print(f"Error saat prediksi: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# 5. EXECUTION BLOCK (Hanya berjalan jika dieksekusi di localhost)
 if __name__ == '__main__':
-    app.run()
+    # Jangan gunakan app.run() kosong, gunakan format ini untuk keamanan port
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
