@@ -7,7 +7,15 @@ import uuid
 import base64
 import cv2  # Tambahan OpenCV untuk Auto-Crop & Real-Time Bounding Box
 
-app = Flask(__name__)
+app = Flask(__name__
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/predict_live', methods=['POST'])
+def predict_live():
+    # ... kode kamu ...
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
