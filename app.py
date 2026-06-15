@@ -119,13 +119,4 @@ def predict_live():
     return jsonify({'faces': results})
 
 if __name__ == '__main__':
-    app.run(debug=True)
-    
-    # ... kode sebelumnya ...
-
-app = Flask(__name__)
-
-# Tambahkan ini agar Vercel bisa membaca aplikasi Flask-mu
-# Vercel mencari objek bernama 'app'
-if __name__ == '__main__':
     app.run()
